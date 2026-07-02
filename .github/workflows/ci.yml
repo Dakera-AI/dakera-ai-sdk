@@ -24,7 +24,7 @@ jobs:
         ai-version: ["latest"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v6

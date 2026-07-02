@@ -1,6 +1,6 @@
 {
   "name": "@dakera-ai/ai-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Vercel AI SDK integration for Dakera AI memory — persistent, decay-weighted cross-session memory via language model middleware and tools",
   "main": "dist/index.js",
   "module": "dist/index.mjs",

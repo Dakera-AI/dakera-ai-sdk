@@ -28,7 +28,22 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check if version already published
+        id: version_check
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "@dakera-ai/ai-sdk@${PKG_VERSION}" version 2>/dev/null | grep -q "${PKG_VERSION}"; then
+            echo "already_published=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${PKG_VERSION} already on npm — skipping publish (idempotent re-run)."
+          else
+            echo "already_published=false" >> "$GITHUB_OUTPUT"
+            echo "Version ${PKG_VERSION} not found on npm — will publish."
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish to npm
+        if: steps.version_check.outputs.already_published != 'true'
         run: npm publish --access=public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

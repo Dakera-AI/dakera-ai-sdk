@@ -55,7 +55,7 @@
     "@ai-sdk/provider": "^4.0.1",
     "@dakera-ai/dakera": "^0.11.100",
     "@types/node": "^26.1.0",
-    "ai": "^6.0.0",
+    "ai": "^7.0.0",
     "tsup": "^8.0.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5",

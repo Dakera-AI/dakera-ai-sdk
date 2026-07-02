@@ -1,0 +1,24 @@
+{
+  "name": "dakera-ai-sdk-examples",
+  "private": true,
+  "description": "Runnable examples for @dakera-ai/ai-sdk",
+  "type": "module",
+  "scripts": {
+    "middleware": "tsx 01-middleware.ts",
+    "tools": "tsx 02-tools.ts",
+    "combined": "tsx 03-combined.ts",
+    "streaming": "tsx 04-streaming.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^1.0.0",
+    "@dakera-ai/ai-sdk": "latest",
+    "@dakera-ai/dakera": "latest",
+    "ai": "^7.0.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  }
+}

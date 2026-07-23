@@ -54,7 +54,9 @@ export function createDakeraTools(options: DakeraToolsOptions) {
         .optional()
         .describe("Maximum number of memories to return"),
     }),
-    execute: async ({ query, topK }) => {
+    execute: async ({ query, topK }): Promise<
+      Array<{ content: string; importance: number; score: number }>
+    > => {
       const { memories } = await client.recall(agentId, query, {
         top_k: topK ?? recallK,
       });
@@ -78,7 +80,7 @@ export function createDakeraTools(options: DakeraToolsOptions) {
         .optional()
         .describe("Importance weight from 0 (trivial) to 1 (critical)"),
     }),
-    execute: async ({ content, importance }) => {
+    execute: async ({ content, importance }): Promise<{ id: string; status: "stored" }> => {
       const res = await client.storeMemory(agentId, {
         content,
         importance: importance ?? defaultImportance,

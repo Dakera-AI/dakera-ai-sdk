@@ -25,6 +25,7 @@
 import type {
   LanguageModelV3Middleware,
   LanguageModelV3Prompt,
+  LanguageModelV3StreamPart,
 } from "@ai-sdk/provider";
 import { resolveClient, type DakeraConnectionOptions } from "./client.js";
 
@@ -132,6 +133,44 @@ export function createDakeraMemoryMiddleware(
         // Swallow storage errors: memory is best-effort, generation is not.
       }
       return result;
+    },
+
+    async wrapStream({ doStream, params }) {
+      const result = await doStream();
+      if (!shouldStore) {
+        return result;
+      }
+      const query = lastUserText(params.prompt);
+      let answer = "";
+      const wrappedStream = result.stream.pipeThrough(
+        new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
+          transform(chunk, controller) {
+            if (chunk.type === "text-delta") {
+              answer += chunk.delta;
+            }
+            controller.enqueue(chunk);
+          },
+          async flush() {
+            try {
+              if (query) {
+                await client.storeMemory(agentId, {
+                  content: `User: ${query}`,
+                  importance,
+                });
+              }
+              if (answer.trim()) {
+                await client.storeMemory(agentId, {
+                  content: `Assistant: ${answer.trim()}`,
+                  importance,
+                });
+              }
+            } catch {
+              // Swallow storage errors: memory is best-effort, streaming is not.
+            }
+          },
+        }),
+      );
+      return { ...result, stream: wrappedStream };
     },
   };
 }

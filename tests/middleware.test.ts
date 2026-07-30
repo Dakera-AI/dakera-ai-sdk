@@ -112,3 +112,113 @@ describe("createDakeraMemoryMiddleware", () => {
     expect((result as { content: unknown[] }).content).toBeDefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// wrapStream tests
+// ---------------------------------------------------------------------------
+
+function makeStream(chunks: Array<Record<string, unknown>>) {
+  return new ReadableStream({
+    start(controller) {
+      for (const c of chunks) controller.enqueue(c);
+      controller.close();
+    },
+  });
+}
+
+async function drainStream(stream: ReadableStream): Promise<unknown[]> {
+  const reader = stream.getReader();
+  const result: unknown[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    result.push(value);
+  }
+  return result;
+}
+
+describe("createDakeraMemoryMiddleware — wrapStream", () => {
+  let client: ReturnType<typeof fakeClient>;
+
+  beforeEach(() => {
+    client = fakeClient([
+      { content: "User prefers TypeScript", importance: 0.9, score: 0.88 },
+    ]);
+  });
+
+  it("passes all stream chunks through unchanged", async () => {
+    const chunks = [
+      { type: "text-start", id: "t1" },
+      { type: "text-delta", id: "t1", delta: "Hello" },
+      { type: "text-delta", id: "t1", delta: " world" },
+      { type: "text-end", id: "t1" },
+    ];
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("hello"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    const out = await drainStream(stream);
+    expect(out).toEqual(chunks);
+  });
+
+  it("stores user query and assembled answer after the stream ends", async () => {
+    const chunks = [
+      { type: "text-delta", id: "t1", delta: "You like " },
+      { type: "text-delta", id: "t1", delta: "TypeScript." },
+    ];
+    const mw = createDakeraMemoryMiddleware({ agentId: "test-agent", client: client as never });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("what do I like?"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(client.storeMemory).toHaveBeenCalledWith("test-agent", {
+      content: "User: what do I like?",
+      importance: 0.7,
+    });
+    expect(client.storeMemory).toHaveBeenCalledWith("test-agent", {
+      content: "Assistant: You like TypeScript.",
+      importance: 0.7,
+    });
+  });
+
+  it("does not store when store:false", async () => {
+    const chunks = [{ type: "text-delta", id: "t1", delta: "response" }];
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      store: false,
+    });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("hi"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(client.storeMemory).not.toHaveBeenCalled();
+  });
+
+  it("never lets a storage failure break the stream", async () => {
+    client.storeMemory.mockRejectedValue(new Error("server down"));
+    const chunks = [{ type: "text-delta", id: "t1", delta: "ok" }];
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("hi"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    const out = await drainStream(stream);
+    expect(out).toHaveLength(1);
+  });
+});

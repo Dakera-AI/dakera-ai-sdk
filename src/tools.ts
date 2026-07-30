@@ -19,7 +19,7 @@
  * });
  * ```
  */
-import { tool } from "ai";
+import { tool, type ToolSet } from "ai";
 import { z } from "zod";
 import { resolveClient, type DakeraConnectionOptions } from "./client.js";
 
@@ -36,7 +36,7 @@ export interface DakeraToolsOptions extends DakeraConnectionOptions {
  * Create `recallMemory` and `storeMemory` tools bound to a Dakera agent.
  * Spread the returned object into the `tools` field of `generateText`/`streamText`.
  */
-export function createDakeraTools(options: DakeraToolsOptions) {
+export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
   const client = resolveClient(options);
   const agentId = options.agentId;
   const recallK = options.recallK ?? 5;

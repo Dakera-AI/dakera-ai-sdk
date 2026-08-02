@@ -57,4 +57,26 @@ describe("createDakeraTools", () => {
       importance: 0.95,
     });
   });
+
+  it("recallMemory uses recallK option as default when no per-call topK", async () => {
+    const tools = createDakeraTools({ agentId: "a", client: client as never, recallK: 8 });
+    await tools.recallMemory.execute!({ query: "x" }, execOpts);
+    expect(client.recall).toHaveBeenCalledWith("a", "x", { top_k: 8 });
+  });
+
+  it("recallMemory propagates errors from client.recall", async () => {
+    client.recall.mockRejectedValue(new Error("network error"));
+    const tools = createDakeraTools({ agentId: "a", client: client as never });
+    await expect(
+      tools.recallMemory.execute!({ query: "x" }, execOpts),
+    ).rejects.toThrow("network error");
+  });
+
+  it("storeMemory propagates errors from client.storeMemory", async () => {
+    client.storeMemory.mockRejectedValue(new Error("store failed"));
+    const tools = createDakeraTools({ agentId: "a", client: client as never });
+    await expect(
+      tools.storeMemory.execute!({ content: "fact" }, execOpts),
+    ).rejects.toThrow("store failed");
+  });
 });

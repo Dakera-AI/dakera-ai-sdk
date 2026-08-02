@@ -221,4 +221,116 @@ describe("createDakeraMemoryMiddleware — wrapStream", () => {
     const out = await drainStream(stream);
     expect(out).toHaveLength(1);
   });
+
+  it("skips all store calls when prompt has no user text and stream has no answer", async () => {
+    // Non-text-delta chunks only → answer stays empty; no user text → both stores skipped.
+    const chunks = [{ type: "text-start", id: "t1" }, { type: "text-end", id: "t1" }];
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      // system-only prompt — no user message
+      params: { prompt: [{ role: "system", content: "be helpful" }] } as never,
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(client.storeMemory).not.toHaveBeenCalled();
+  });
+
+  it("skips only the user store when prompt has no user text but stream has assistant text", async () => {
+    // No user text → user store skipped; text-delta present → assistant store still fires.
+    const chunks = [{ type: "text-delta", id: "t1", delta: "Hi!" }];
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const doStream = vi.fn().mockResolvedValue({ stream: makeStream(chunks), rawCall: {} });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: { prompt: [{ role: "system", content: "be helpful" }] } as never,
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(client.storeMemory).toHaveBeenCalledTimes(1);
+    expect(client.storeMemory).toHaveBeenCalledWith("a", {
+      content: "Assistant: Hi!",
+      importance: 0.7,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Option forwarding tests
+// ---------------------------------------------------------------------------
+
+describe("createDakeraMemoryMiddleware — option forwarding", () => {
+  it("forwards custom recallK and minImportance to client.recall", async () => {
+    const client = {
+      recall: vi.fn().mockResolvedValue({ memories: [] }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      recallK: 10,
+      minImportance: 0.5,
+    });
+    await mw.transformParams!({
+      type: "generate",
+      params: userParams("hello"),
+      model: {} as never,
+    });
+    expect(client.recall).toHaveBeenCalledWith(
+      "a",
+      "hello",
+      expect.objectContaining({ top_k: 10, min_importance: 0.5 }),
+    );
+  });
+
+  it("uses custom importance when storing memories", async () => {
+    const client = {
+      recall: vi.fn().mockResolvedValue({ memories: [] }),
+      storeMemory: vi.fn().mockResolvedValue({ memory: { id: "m1" } }),
+    };
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      importance: 0.95,
+    });
+    const doGenerate = vi.fn().mockResolvedValue({
+      content: [{ type: "text", text: "answer" }],
+    });
+    await mw.wrapGenerate!({
+      doGenerate,
+      params: userParams("question"),
+      model: {} as never,
+      doStream: vi.fn() as never,
+    });
+    expect(client.storeMemory).toHaveBeenCalledWith(
+      "a",
+      expect.objectContaining({ importance: 0.95 }),
+    );
+  });
+
+  it("injects custom header text before the recalled memory block", async () => {
+    const client = {
+      recall: vi.fn().mockResolvedValue({
+        memories: [{ content: "User likes Go", importance: 0.8, score: 0.9 }],
+      }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      header: "CONTEXT:",
+    });
+    const out = await mw.transformParams!({
+      type: "generate",
+      params: userParams("what language?"),
+      model: {} as never,
+    });
+    const prompt = (out as { prompt: Array<{ role: string; content: string }> }).prompt;
+    expect(prompt[0].role).toBe("system");
+    expect(prompt[0].content).toMatch(/^CONTEXT:/);
+    expect(prompt[0].content).toContain("User likes Go");
+  });
 });

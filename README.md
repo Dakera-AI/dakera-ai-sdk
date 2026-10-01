@@ -9,6 +9,8 @@ Vercel AI SDK integration for [Dakera](https://dakera.ai) — a self-hosted memo
 
 Memories are importance-scored and decay over time, so stale context stops competing with fresh, relevant facts. The integration plugs into the AI SDK's two standard extension points — **language model middleware** and **tools** — so you can add cross-session memory to any AI SDK app without changing your model or provider code.
 
+**Compatibility:** `@dakera-ai/dakera` ^0.12.1; Dakera server v0.12.0 (also compatible with v0.11.108).
+
 ## Quick start
 
 ```bash

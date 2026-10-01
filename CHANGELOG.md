@@ -5,6 +5,14 @@ All notable changes to `@dakera-ai/ai-sdk` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-01
+
+### Changed
+
+- Requires `@dakera-ai/dakera` `^0.12.1` (peer and dev dependency). Compatible with Dakera server v0.12.0 and v0.11.108.
+- No source changes were needed: the middleware and tools do not use the removed SDK members
+  (`fetch`, `flush`, `configureTtl`, `listExtractProviders`) or `memoryLink`.
+
 ## [0.1.0] - 2026-07-02
 
 ### Added

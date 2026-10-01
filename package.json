@@ -1,6 +1,6 @@
 {
   "name": "@dakera-ai/ai-sdk",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Vercel AI SDK integration for Dakera AI memory — persistent, decay-weighted cross-session memory via language model middleware and tools",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -47,13 +47,13 @@
     "url": "https://github.com/dakera-ai/dakera-ai-sdk/issues"
   },
   "peerDependencies": {
-    "@dakera-ai/dakera": ">=0.11.54",
+    "@dakera-ai/dakera": "^0.12.1",
     "ai": ">=6.0.0",
     "zod": ">=3.23.0"
   },
   "devDependencies": {
     "@ai-sdk/provider": "^4.0.1",
-    "@dakera-ai/dakera": "^0.11.100",
+    "@dakera-ai/dakera": "^0.12.1",
     "@types/node": "^26.1.0",
     "ai": "^7.0.0",
     "tsup": "^8.0.0",

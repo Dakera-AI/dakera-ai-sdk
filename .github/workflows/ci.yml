@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ["20", "22"]
-        ai-version: ["latest"]
+        ai-version: ["6", "latest"]
 
     steps:
       - uses: actions/checkout@v7
@@ -42,6 +42,9 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
 
+      - name: Lint
+        run: npm run lint
+
       - name: Type check
         run: npm run typecheck
 
@@ -50,6 +53,30 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  examples:
+    name: Examples (type check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The examples call OpenAI, so CI type-checks them against the build
+      # (they install it from the repository root) instead of running them.
+      - name: Type check examples
+        run: npm run typecheck:examples
 
   integration:
     name: Integration (Dakera 0.12.3)

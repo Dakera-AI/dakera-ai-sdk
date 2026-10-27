@@ -2,11 +2,11 @@
  * Example 4 — Streaming with memory middleware
  *
  * `streamText` works with `wrapLanguageModel` unchanged. The middleware
- * automatically recalls memories before streaming begins and persists the
- * exchange (via `wrapStream`) once the stream flushes — no extra setup needed.
+ * recalls memories before the stream starts and stores the exchange (via
+ * `wrapStream`) once the stream has finished — no extra setup needed.
  *
- * Run:
- *   OPENAI_API_KEY=sk-... DAKERA_API_KEY=dk-dev npx tsx 04-streaming.ts
+ * Run (see README.md in this folder):
+ *   OPENAI_API_KEY=sk-... DAKERA_URL=http://localhost:3000 DAKERA_API_KEY=dk-mykey npx tsx 04-streaming.ts
  */
 
 import { streamText, wrapLanguageModel } from "ai";
@@ -17,20 +17,22 @@ const model = wrapLanguageModel({
   model: openai("gpt-4o-mini"),
   middleware: createDakeraMemoryMiddleware({
     agentId: "example-user-4",
-    // store: true is the default — both streaming and non-streaming calls
-    // persist memories automatically via wrapStream / wrapGenerate.
+    // store: true is the default — streaming and non-streaming calls both
+    // persist the exchange (via wrapStream / wrapGenerate).
+    onError: (error, operation) => console.warn(`Dakera ${operation} failed:`, error),
   }),
 });
 
-console.log("Streaming response with recalled context...\n");
-
-const { textStream, finishReason } = streamText({
-  model,
-  prompt: "Tell me about my current project in a short paragraph.",
-});
-
-for await (const chunk of textStream) {
-  process.stdout.write(chunk);
+async function stream(prompt: string): Promise<void> {
+  console.log(`> ${prompt}`);
+  const result = streamText({ model, prompt });
+  for await (const chunk of result.textStream) {
+    process.stdout.write(chunk);
+  }
+  console.log(`\n(finish reason: ${await result.finishReason})\n`);
 }
 
-console.log("\n\nFinish reason:", await finishReason);
+// The exchange is stored when the first stream finishes...
+await stream("I'm writing a field guide to alpine plants, due in June.");
+// ...so the second call recalls it.
+await stream("Tell me about my current project in one sentence.");

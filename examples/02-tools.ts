@@ -5,11 +5,11 @@
  * tools. The model decides when to look something up or when to persist a fact.
  * Useful for agents that need deliberate memory management.
  *
- * Run:
- *   OPENAI_API_KEY=sk-... DAKERA_API_KEY=dk-dev npx tsx 02-tools.ts
+ * Run (see README.md in this folder):
+ *   OPENAI_API_KEY=sk-... DAKERA_URL=http://localhost:3000 DAKERA_API_KEY=dk-mykey npx tsx 02-tools.ts
  */
 
-import { generateText } from "ai";
+import { generateText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { createDakeraTools } from "@dakera-ai/ai-sdk";
 
@@ -23,7 +23,7 @@ console.log("=== Step 1: storing a preference ===");
 const { text: reply1, steps: steps1 } = await generateText({
   model: openai("gpt-4o-mini"),
   tools,
-  maxSteps: 3,
+  stopWhen: stepCountIs(3),
   prompt:
     "Please remember that I always want code examples in TypeScript, not JavaScript.",
 });
@@ -34,7 +34,7 @@ console.log("\n=== Step 2: recalling the preference ===");
 const { text: reply2, steps: steps2 } = await generateText({
   model: openai("gpt-4o-mini"),
   tools,
-  maxSteps: 3,
+  stopWhen: stepCountIs(3),
   system:
     "You are a helpful coding assistant. Always check memory for user preferences before answering.",
   prompt: "Show me a quick example of how to read a file.",

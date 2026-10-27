@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ErrorCode, NotFoundError } from "@dakera-ai/dakera";
 import { createDakeraTools } from "../src/tools.js";
 
 function fakeClient() {
@@ -111,6 +112,14 @@ describe("createDakeraTools", () => {
     await expect(
       tools.recallMemory.execute!({ query: "x" }, execOpts),
     ).rejects.toThrow("network error");
+  });
+
+  it("recallMemory returns no memories for an agent an older server does not know yet", async () => {
+    client.recall.mockRejectedValue(
+      new NotFoundError("Namespace not found: _dakera_agent_a", 404, undefined, ErrorCode.NAMESPACE_NOT_FOUND),
+    );
+    const tools = createDakeraTools({ agentId: "a", client: client as never });
+    expect(await tools.recallMemory.execute!({ query: "x" }, execOpts)).toEqual([]);
   });
 
   it("storeMemory propagates errors from client.storeMemory", async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ErrorCode, NotFoundError } from "@dakera-ai/dakera";
 import { createDakeraMemoryMiddleware } from "../src/middleware.js";
 
 // A minimal fake DakeraClient — passed via the `client` option so no live
@@ -112,6 +113,51 @@ describe("createDakeraMemoryMiddleware", () => {
     });
     expect((result as { content: unknown[] }).content).toBeDefined();
   });
+
+  it("reports a storage failure to onError", async () => {
+    const failure = new Error("server down");
+    client.storeMemory.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const doGenerate = vi.fn().mockResolvedValue({ content: [{ type: "text", text: "ok" }] });
+    await mw.wrapGenerate!({ doGenerate, params: userParams("hi"), model: {} as never, doStream: vi.fn() as never });
+    expect(onError).toHaveBeenCalledWith(failure, "store");
+  });
+
+  it("calls the model without memories when recall fails, and reports the error", async () => {
+    const failure = new Error("connection refused");
+    client.recall.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const params = userParams("hi");
+    const out = await mw.transformParams!({ type: "generate", params, model: {} as never });
+    expect(out).toBe(params);
+    expect(onError).toHaveBeenCalledWith(failure, "recall");
+  });
+
+  it("a throwing onError does not fail the call", async () => {
+    client.recall.mockRejectedValue(new Error("connection refused"));
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      onError: () => {
+        throw new Error("logger down");
+      },
+    });
+    const params = userParams("hi");
+    await expect(mw.transformParams!({ type: "generate", params, model: {} as never })).resolves.toBe(params);
+  });
+
+  it("treats an agent an older server does not know yet (404 NAMESPACE_NOT_FOUND) as having no memories", async () => {
+    client.recall.mockRejectedValue(
+      new NotFoundError("Namespace not found: _dakera_agent_a", 404, undefined, ErrorCode.NAMESPACE_NOT_FOUND),
+    );
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const params = userParams("hi");
+    expect(await mw.transformParams!({ type: "generate", params, model: {} as never })).toBe(params);
+    expect(onError).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -221,6 +267,25 @@ describe("createDakeraMemoryMiddleware — wrapStream", () => {
     });
     const out = await drainStream(stream);
     expect(out).toHaveLength(1);
+  });
+
+  it("reports a storage failure after the stream to onError", async () => {
+    const failure = new Error("server down");
+    client.storeMemory.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const doStream = vi.fn().mockResolvedValue({
+      stream: makeStream([{ type: "text-delta", id: "t1", delta: "ok" }]),
+      rawCall: {},
+    });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("hi"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(onError).toHaveBeenCalledWith(failure, "store");
   });
 
   it("skips all store calls when prompt has no user text and stream has no answer", async () => {

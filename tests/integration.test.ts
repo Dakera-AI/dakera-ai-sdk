@@ -1,7 +1,7 @@
 /**
  * Live tests against a real Dakera server. Skipped unless DAKERA_API_URL is set:
  *
- *   docker run -p 3300:3300 -e DAKERA_PORT=3300 -e DAKERA_AUTH_ENABLED=false ghcr.io/dakera-ai/dakera:0.12.3
+ *   docker run -d -p 3300:3300 -e DAKERA_PORT=3300 -e DAKERA_AUTH_ENABLED=false ghcr.io/dakera-ai/dakera:0.12.3
  *   DAKERA_API_URL=http://localhost:3300 npm test
  */
 import { describe, it, expect } from "vitest";
@@ -10,7 +10,8 @@ import { MockLanguageModelV3 } from "ai/test";
 import { DakeraClient } from "@dakera-ai/dakera";
 import { createDakeraMemoryMiddleware, createDakeraTools } from "../src/index.js";
 
-const apiUrl = process.env["DAKERA_API_URL"];
+// "" when unset: the suite is skipped, but its body still runs while tests are collected.
+const apiUrl = process.env["DAKERA_API_URL"] ?? "";
 const apiKey = process.env["DAKERA_API_KEY"];
 const execOpts = { toolCallId: "call_1", messages: [] } as never;
 const usage = {
@@ -58,8 +59,8 @@ function mockModel(reply: string) {
 }
 
 describe.skipIf(!apiUrl)("live Dakera server", () => {
-  const client = new DakeraClient({ baseUrl: apiUrl!, ...(apiKey ? { apiKey } : {}) });
-  const conn = { apiUrl: apiUrl!, ...(apiKey ? { apiKey } : {}) };
+  const client = new DakeraClient({ baseUrl: apiUrl, ...(apiKey ? { apiKey } : {}) });
+  const conn = { apiUrl, ...(apiKey ? { apiKey } : {}) };
 
   it("middleware stores an exchange and recalls it on the next call", async () => {
     const agentId = agent("mw");

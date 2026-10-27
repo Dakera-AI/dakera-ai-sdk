@@ -5,8 +5,8 @@
  * memories before each call, then stores the new exchange afterwards.
  * Your generation code needs no changes.
  *
- * Run:
- *   OPENAI_API_KEY=sk-... DAKERA_API_KEY=dk-dev npx tsx 01-middleware.ts
+ * Run (see README.md in this folder):
+ *   OPENAI_API_KEY=sk-... DAKERA_URL=http://localhost:3000 DAKERA_API_KEY=dk-mykey npx tsx 01-middleware.ts
  */
 
 import { generateText, wrapLanguageModel } from "ai";

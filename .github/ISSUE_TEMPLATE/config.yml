@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security Vulnerability
-    url: https://github.com/dakera-ai/dakera-langchain-js/security/advisories/new
+    url: https://github.com/Dakera-AI/dakera-ai-sdk/security/advisories/new
     about: Report security vulnerabilities via GitHub Security Advisories, not public Issues.
   - name: Dakera Documentation
     url: https://dakera.ai/docs

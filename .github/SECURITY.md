@@ -8,7 +8,7 @@ If you discover a security vulnerability in this project, please report it respo
 
 ### How to Report
 
-Report via [GitHub Security Advisories](https://github.com/dakera-ai/dakera-langchain-js/security/advisories/new)
+Report via [GitHub Security Advisories](https://github.com/Dakera-AI/dakera-ai-sdk/security/advisories/new)
 
 Please include:
 - Description of the vulnerability
@@ -38,6 +38,7 @@ This policy covers security vulnerabilities in this integration library, includi
 - Data serialization and deserialization
 - Network communication with the Dakera server
 
-For vulnerabilities in the Dakera server itself, see the [dakera](https://github.com/dakera-ai/dakera) repository.
-For the hosted Dakera service, use the same email address above.
+For vulnerabilities in the Dakera server itself or the hosted Dakera service, report them through this
+repository's [Security Advisories](https://github.com/Dakera-AI/dakera-ai-sdk/security/advisories/new) as well;
+they reach the same maintainers.
 

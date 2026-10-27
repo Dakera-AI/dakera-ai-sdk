@@ -27,12 +27,12 @@ import type {
   LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
 } from "@ai-sdk/provider";
-import { resolveClient, type DakeraConnectionOptions } from "./client.js";
+import { rankedMemories, resolveClient, type DakeraConnectionOptions } from "./client.js";
 
 export interface DakeraMemoryMiddlewareOptions extends DakeraConnectionOptions {
   /** Agent identifier that scopes stored and recalled memories. */
   agentId: string;
-  /** Number of memories to recall and inject per call (default: 5). */
+  /** Maximum number of memories to recall and inject per call (default: 5). */
   recallK?: number;
   /** Minimum importance score for recalled memories (default: 0). */
   minImportance?: number;
@@ -87,11 +87,13 @@ export function createDakeraMemoryMiddleware(
       if (!query) {
         return params;
       }
-      const { memories } = await client.recall(agentId, query, {
+      const response = await client.recall(agentId, query, {
         top_k: recallK,
         min_importance: minImportance,
+        neighborhood_mode: "separate",
       });
-      if (!memories || memories.length === 0) {
+      const memories = rankedMemories(response.memories, recallK);
+      if (memories.length === 0) {
         return params;
       }
       const block = [header, ...memories.map((m) => `- ${m.content}`)].join("\n");

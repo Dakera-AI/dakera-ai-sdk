@@ -21,7 +21,7 @@
  */
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { resolveClient, type DakeraConnectionOptions } from "./client.js";
+import { rankedMemories, resolveClient, type DakeraConnectionOptions } from "./client.js";
 
 export interface DakeraToolsOptions extends DakeraConnectionOptions {
   /** Agent identifier that scopes stored and recalled memories. */
@@ -57,10 +57,12 @@ export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
     execute: async ({ query, topK }): Promise<
       Array<{ content: string; importance: number; score: number }>
     > => {
+      const limit = topK ?? recallK;
       const { memories } = await client.recall(agentId, query, {
-        top_k: topK ?? recallK,
+        top_k: limit,
+        neighborhood_mode: "separate",
       });
-      return memories.map((m) => ({
+      return rankedMemories(memories, limit).map((m) => ({
         content: m.content,
         importance: m.importance,
         score: m.score,
@@ -79,11 +81,23 @@ export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
         .max(1)
         .optional()
         .describe("Importance weight from 0 (trivial) to 1 (critical)"),
+      eventTime: z
+        .string()
+        .datetime({ offset: true })
+        .optional()
+        .describe(
+          "When the fact happened, as an ISO 8601 date-time (e.g. 2026-05-20T14:00:00Z). Omit when it is happening now.",
+        ),
     }),
-    execute: async ({ content, importance }): Promise<{ id: string; status: "stored" }> => {
+    execute: async ({
+      content,
+      importance,
+      eventTime,
+    }): Promise<{ id: string; status: "stored" }> => {
       const res = await client.storeMemory(agentId, {
         content,
         importance: importance ?? defaultImportance,
+        ...(eventTime !== undefined ? { event_time: eventTime } : {}),
       });
       return { id: res.memory.id, status: "stored" as const };
     },

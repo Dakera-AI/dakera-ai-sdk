@@ -9,7 +9,8 @@ Vercel AI SDK integration for [Dakera](https://dakera.ai) — a self-hosted memo
 
 Memories are importance-scored and decay over time, so stale context stops competing with fresh, relevant facts. The integration plugs into the AI SDK's two standard extension points — **language model middleware** and **tools** — so you can add cross-session memory to any AI SDK app without changing your model or provider code.
 
-**Compatibility:** `@dakera-ai/dakera` ^0.12.1; Dakera server v0.12.0 (also compatible with v0.11.108).
+**Compatibility:** `@dakera-ai/dakera` ^0.12.3; Dakera server v0.12.3 (v0.12.0 – v0.12.2 work too; `eventTime` is
+kept only from v0.12.3).
 
 ## Quick start
 
@@ -101,7 +102,7 @@ for await (const chunk of textStream) {
 | `apiUrl` | `string` | `$DAKERA_URL` / `http://localhost:3000` | Dakera server URL |
 | `apiKey` | `string` | `$DAKERA_API_KEY` | API key (`dk-...`) |
 | `client` | `DakeraClient` | — | Pre-built client (overrides `apiUrl`/`apiKey`) |
-| `recallK` | `number` | `5` | Memories to recall and inject per call |
+| `recallK` | `number` | `5` | Maximum memories to recall and inject per call (the server's session-neighbourhood context is left out) |
 | `minImportance` | `number` | `0` | Minimum importance score to recall (0 – 1) |
 | `importance` | `number` | `0.7` | Importance assigned to stored memories (0 – 1) |
 | `store` | `boolean` | `true` | Persist the exchange after generation |
@@ -127,6 +128,11 @@ const { text } = await generateText({
 // Model calls storeMemory("User prefers metric units", importance 0.8),
 // then answers: "5 miles = 8.047 km"
 ```
+
+`recallMemory` takes `query` and an optional `topK` (it returns at most `topK` memories). `storeMemory` takes
+`content`, an optional `importance` and an optional `eventTime`: when the fact happened, as an ISO 8601 date-time
+with an offset (`2026-05-20T14:00:00Z`). The server (v0.12.3+) uses it for recency and time-range recall;
+the memory's creation time stays the time it was stored.
 
 ### Tool options
 
@@ -199,6 +205,15 @@ DAKERA_URL=http://localhost:3000 DAKERA_API_KEY=dk-dev npx tsx 01-middleware.ts
 ```
 
 See [`examples/README.md`](examples/README.md) for all examples and prerequisites.
+
+## Testing
+
+`npm test` runs the unit tests. With a Dakera server running, `tests/integration.test.ts` also runs against it:
+
+```bash
+docker run -d -p 3300:3300 -e DAKERA_PORT=3300 -e DAKERA_AUTH_ENABLED=false ghcr.io/dakera-ai/dakera:0.12.3
+DAKERA_API_URL=http://localhost:3300 npm test
+```
 
 ## Troubleshooting
 

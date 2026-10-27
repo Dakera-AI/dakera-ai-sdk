@@ -1,5 +1,5 @@
 import { DakeraClient } from "@dakera-ai/dakera";
-import type { ClientOptions } from "@dakera-ai/dakera";
+import type { ClientOptions, RecalledMemory } from "@dakera-ai/dakera";
 
 /** Connection options shared by the middleware and tools helpers. */
 export interface DakeraConnectionOptions {
@@ -33,4 +33,16 @@ export function resolveClient(options: DakeraConnectionOptions): DakeraClient {
     ...(apiKey !== undefined ? { apiKey } : {}),
   };
   return new DakeraClient(clientOpts);
+}
+
+/**
+ * The ranked results of a recall, at most `topK`, best first.
+ *
+ * Recall is requested with `neighborhood_mode: "separate"`, which keeps the
+ * server's session-neighbourhood context out of `memories`; a server before
+ * v0.12.3 ignores the mode and appends that context inline (marked
+ * `retrieval: "neighborhood"`), so such items are dropped here too.
+ */
+export function rankedMemories(memories: RecalledMemory[] | undefined, topK: number): RecalledMemory[] {
+  return (memories ?? []).filter((m) => m.retrieval !== "neighborhood").slice(0, topK);
 }

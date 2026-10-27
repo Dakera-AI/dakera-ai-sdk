@@ -38,6 +38,7 @@ describe("createDakeraMemoryMiddleware", () => {
     expect(client.recall).toHaveBeenCalledWith("test-agent", "what language do I like?", {
       top_k: 5,
       min_importance: 0,
+      neighborhood_mode: "separate",
     });
     const prompt = (out as { prompt: Array<{ role: string; content: string }> }).prompt;
     expect(prompt[0].role).toBe("system");
@@ -284,6 +285,42 @@ describe("createDakeraMemoryMiddleware — option forwarding", () => {
       "hello",
       expect.objectContaining({ top_k: 10, min_importance: 0.5 }),
     );
+  });
+
+  it("injects at most recallK ranked memories, without neighbourhood context", async () => {
+    // A server before v0.12.3 ignores neighborhood_mode and appends the context inline.
+    const client = {
+      recall: vi.fn().mockResolvedValue({
+        memories: [
+          { content: "first", importance: 0.5, score: 0.9 },
+          { content: "context", importance: 0.5, score: 0, retrieval: "neighborhood" },
+          { content: "second", importance: 0.5, score: 0.8 },
+          { content: "third", importance: 0.5, score: 0.7 },
+        ],
+      }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, recallK: 2 });
+    const out = await mw.transformParams!({
+      type: "generate",
+      params: userParams("hello"),
+      model: {} as never,
+    });
+    const prompt = (out as { prompt: Array<{ role: string; content: string }> }).prompt;
+    expect(prompt[0].content.split("\n").slice(1)).toEqual(["- first", "- second"]);
+  });
+
+  it("passes through unchanged when recall returns only neighbourhood context", async () => {
+    const client = {
+      recall: vi.fn().mockResolvedValue({
+        memories: [{ content: "context", importance: 0.5, score: 0, retrieval: "neighborhood" }],
+      }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const params = userParams("hello");
+    const out = await mw.transformParams!({ type: "generate", params, model: {} as never });
+    expect(out).toBe(params);
   });
 
   it("uses custom importance when storing memories", async () => {

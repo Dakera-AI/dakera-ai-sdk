@@ -7,7 +7,7 @@
  *
  * @example
  * ```typescript
- * import { generateText } from "ai";
+ * import { generateText, stepCountIs } from "ai";
  * import { openai } from "@ai-sdk/openai";
  * import { createDakeraTools } from "@dakera-ai/ai-sdk";
  *
@@ -15,13 +15,19 @@
  * const { text } = await generateText({
  *   model: openai("gpt-4o"),
  *   tools,
+ *   stopWhen: stepCountIs(3), // let the model call a tool, then answer
  *   prompt: "What did I tell you about my project last week?",
  * });
  * ```
  */
 import { tool, type ToolSet } from "ai";
 import { z } from "zod";
-import { resolveClient, type DakeraConnectionOptions } from "./client.js";
+import {
+  isUnknownAgent,
+  rankedMemories,
+  resolveClient,
+  type DakeraConnectionOptions,
+} from "./client.js";
 
 export interface DakeraToolsOptions extends DakeraConnectionOptions {
   /** Agent identifier that scopes stored and recalled memories. */
@@ -33,8 +39,18 @@ export interface DakeraToolsOptions extends DakeraConnectionOptions {
 }
 
 /**
- * Create `recallMemory` and `storeMemory` tools bound to a Dakera agent.
- * Spread the returned object into the `tools` field of `generateText`/`streamText`.
+ * Create `recallMemory` and `storeMemory` tools bound to a Dakera agent. Pass
+ * the returned object as the `tools` of `generateText` / `streamText` (or
+ * spread it next to your own tools).
+ *
+ * - `recallMemory({ query, topK? })` returns at most `topK` (default `recallK`)
+ *   memories, best first, as `{ content, importance, score }`.
+ * - `storeMemory({ content, importance?, eventTime? })` stores one memory and
+ *   returns `{ id, status: "stored" }`.
+ *
+ * Errors of the Dakera client (other than recalling an agent that has stored
+ * nothing yet) are thrown from the tool, which the AI SDK reports to the model
+ * as a tool error.
  */
 export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
   const client = resolveClient(options);
@@ -57,10 +73,20 @@ export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
     execute: async ({ query, topK }): Promise<
       Array<{ content: string; importance: number; score: number }>
     > => {
-      const { memories } = await client.recall(agentId, query, {
-        top_k: topK ?? recallK,
-      });
-      return memories.map((m) => ({
+      const limit = topK ?? recallK;
+      let recalled;
+      try {
+        recalled = await client.recall(agentId, query, {
+          top_k: limit,
+          neighborhood_mode: "separate",
+        });
+      } catch (err) {
+        if (isUnknownAgent(err)) {
+          return [];
+        }
+        throw err;
+      }
+      return rankedMemories(recalled.memories, limit).map((m) => ({
         content: m.content,
         importance: m.importance,
         score: m.score,
@@ -79,11 +105,23 @@ export function createDakeraTools(options: DakeraToolsOptions): ToolSet {
         .max(1)
         .optional()
         .describe("Importance weight from 0 (trivial) to 1 (critical)"),
+      eventTime: z
+        .string()
+        .datetime({ offset: true })
+        .optional()
+        .describe(
+          "When the fact happened, as an ISO 8601 date-time (e.g. 2026-05-20T14:00:00Z). Omit when it is happening now.",
+        ),
     }),
-    execute: async ({ content, importance }): Promise<{ id: string; status: "stored" }> => {
+    execute: async ({
+      content,
+      importance,
+      eventTime,
+    }): Promise<{ id: string; status: "stored" }> => {
       const res = await client.storeMemory(agentId, {
         content,
         importance: importance ?? defaultImportance,
+        ...(eventTime !== undefined ? { event_time: eventTime } : {}),
       });
       return { id: res.memory.id, status: "stored" as const };
     },

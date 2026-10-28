@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { ErrorCode, NotFoundError } from "@dakera-ai/dakera";
 import { createDakeraMemoryMiddleware } from "../src/middleware.js";
 
 // A minimal fake DakeraClient — passed via the `client` option so no live
@@ -38,6 +39,7 @@ describe("createDakeraMemoryMiddleware", () => {
     expect(client.recall).toHaveBeenCalledWith("test-agent", "what language do I like?", {
       top_k: 5,
       min_importance: 0,
+      neighborhood_mode: "separate",
     });
     const prompt = (out as { prompt: Array<{ role: string; content: string }> }).prompt;
     expect(prompt[0].role).toBe("system");
@@ -110,6 +112,51 @@ describe("createDakeraMemoryMiddleware", () => {
       doStream: vi.fn() as never,
     });
     expect((result as { content: unknown[] }).content).toBeDefined();
+  });
+
+  it("reports a storage failure to onError", async () => {
+    const failure = new Error("server down");
+    client.storeMemory.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const doGenerate = vi.fn().mockResolvedValue({ content: [{ type: "text", text: "ok" }] });
+    await mw.wrapGenerate!({ doGenerate, params: userParams("hi"), model: {} as never, doStream: vi.fn() as never });
+    expect(onError).toHaveBeenCalledWith(failure, "store");
+  });
+
+  it("calls the model without memories when recall fails, and reports the error", async () => {
+    const failure = new Error("connection refused");
+    client.recall.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const params = userParams("hi");
+    const out = await mw.transformParams!({ type: "generate", params, model: {} as never });
+    expect(out).toBe(params);
+    expect(onError).toHaveBeenCalledWith(failure, "recall");
+  });
+
+  it("a throwing onError does not fail the call", async () => {
+    client.recall.mockRejectedValue(new Error("connection refused"));
+    const mw = createDakeraMemoryMiddleware({
+      agentId: "a",
+      client: client as never,
+      onError: () => {
+        throw new Error("logger down");
+      },
+    });
+    const params = userParams("hi");
+    await expect(mw.transformParams!({ type: "generate", params, model: {} as never })).resolves.toBe(params);
+  });
+
+  it("treats an agent an older server does not know yet (404 NAMESPACE_NOT_FOUND) as having no memories", async () => {
+    client.recall.mockRejectedValue(
+      new NotFoundError("Namespace not found: _dakera_agent_a", 404, undefined, ErrorCode.NAMESPACE_NOT_FOUND),
+    );
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const params = userParams("hi");
+    expect(await mw.transformParams!({ type: "generate", params, model: {} as never })).toBe(params);
+    expect(onError).not.toHaveBeenCalled();
   });
 });
 
@@ -222,6 +269,25 @@ describe("createDakeraMemoryMiddleware — wrapStream", () => {
     expect(out).toHaveLength(1);
   });
 
+  it("reports a storage failure after the stream to onError", async () => {
+    const failure = new Error("server down");
+    client.storeMemory.mockRejectedValue(failure);
+    const onError = vi.fn();
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, onError });
+    const doStream = vi.fn().mockResolvedValue({
+      stream: makeStream([{ type: "text-delta", id: "t1", delta: "ok" }]),
+      rawCall: {},
+    });
+    const { stream } = await mw.wrapStream!({
+      doStream,
+      params: userParams("hi"),
+      model: {} as never,
+      doGenerate: vi.fn() as never,
+    });
+    await drainStream(stream);
+    expect(onError).toHaveBeenCalledWith(failure, "store");
+  });
+
   it("skips all store calls when prompt has no user text and stream has no answer", async () => {
     // Non-text-delta chunks only → answer stays empty; no user text → both stores skipped.
     const chunks = [{ type: "text-start", id: "t1" }, { type: "text-end", id: "t1" }];
@@ -284,6 +350,42 @@ describe("createDakeraMemoryMiddleware — option forwarding", () => {
       "hello",
       expect.objectContaining({ top_k: 10, min_importance: 0.5 }),
     );
+  });
+
+  it("injects at most recallK ranked memories, without neighbourhood context", async () => {
+    // A server before v0.12.3 ignores neighborhood_mode and appends the context inline.
+    const client = {
+      recall: vi.fn().mockResolvedValue({
+        memories: [
+          { content: "first", importance: 0.5, score: 0.9 },
+          { content: "context", importance: 0.5, score: 0, retrieval: "neighborhood" },
+          { content: "second", importance: 0.5, score: 0.8 },
+          { content: "third", importance: 0.5, score: 0.7 },
+        ],
+      }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never, recallK: 2 });
+    const out = await mw.transformParams!({
+      type: "generate",
+      params: userParams("hello"),
+      model: {} as never,
+    });
+    const prompt = (out as { prompt: Array<{ role: string; content: string }> }).prompt;
+    expect(prompt[0].content.split("\n").slice(1)).toEqual(["- first", "- second"]);
+  });
+
+  it("passes through unchanged when recall returns only neighbourhood context", async () => {
+    const client = {
+      recall: vi.fn().mockResolvedValue({
+        memories: [{ content: "context", importance: 0.5, score: 0, retrieval: "neighborhood" }],
+      }),
+      storeMemory: vi.fn(),
+    };
+    const mw = createDakeraMemoryMiddleware({ agentId: "a", client: client as never });
+    const params = userParams("hello");
+    const out = await mw.transformParams!({ type: "generate", params, model: {} as never });
+    expect(out).toBe(params);
   });
 
   it("uses custom importance when storing memories", async () => {

@@ -5,11 +5,11 @@
  * context) and the tools when you want the model to persist facts explicitly.
  * A single DakeraClient is shared to avoid duplicate connections.
  *
- * Run:
- *   OPENAI_API_KEY=sk-... DAKERA_API_KEY=dk-dev npx tsx 03-combined.ts
+ * Run (see README.md in this folder):
+ *   OPENAI_API_KEY=sk-... DAKERA_URL=http://localhost:3000 DAKERA_API_KEY=dk-mykey npx tsx 03-combined.ts
  */
 
-import { generateText, wrapLanguageModel } from "ai";
+import { generateText, stepCountIs, wrapLanguageModel } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { DakeraClient } from "@dakera-ai/dakera";
 import { createDakeraMemoryMiddleware, createDakeraTools } from "@dakera-ai/ai-sdk";
@@ -34,7 +34,7 @@ console.log("=== Turn 1: model decides what to remember ===");
 const { text: reply1, steps: steps1 } = await generateText({
   model,
   tools,
-  maxSteps: 4,
+  stopWhen: stepCountIs(4),
   system:
     "You are a helpful assistant. Use storeMemory only for facts the user will want in future sessions (not transient conversation details).",
   prompt:
@@ -47,7 +47,7 @@ console.log("\n=== Turn 2: middleware injects recalled memories automatically ==
 const { text: reply2 } = await generateText({
   model,
   tools,
-  maxSteps: 2,
+  stopWhen: stepCountIs(2),
   prompt: "What stack should I use for my next project?",
 });
 console.log("Assistant:", reply2);

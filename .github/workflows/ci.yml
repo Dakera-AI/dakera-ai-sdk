@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         node-version: ["20", "22"]
-        ai-version: ["latest"]
+        ai-version: ["6", "latest"]
 
     steps:
       - uses: actions/checkout@v7
@@ -42,6 +42,9 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
 
+      - name: Lint
+        run: npm run lint
+
       - name: Type check
         run: npm run typecheck
 
@@ -50,3 +53,78 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  examples:
+    name: Examples (type check)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # The examples call OpenAI, so CI type-checks them against the build
+      # (they install it from the repository root) instead of running them.
+      - name: Type check examples
+        run: npm run typecheck:examples
+
+  integration:
+    name: Integration (Dakera 0.12.3)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    services:
+      dakera:
+        image: ghcr.io/dakera-ai/dakera:0.12.3
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          DAKERA_AUTH_ENABLED: "false"
+          DAKERA_HOST: "0.0.0.0"
+          DAKERA_PORT: "3300"
+        ports:
+          - 3300:3300
+        # No in-container --health-cmd: images >= 0.12.3 ship no curl. Readiness is
+        # polled from the runner in "Wait for Dakera".
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Dakera
+        run: |
+          for i in $(seq 1 90); do
+            if curl -sf http://localhost:3300/health; then
+              echo "Dakera is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Dakera failed to start"
+          exit 1
+
+      - name: Run tests against the server
+        env:
+          DAKERA_API_URL: http://localhost:3300
+        run: npx vitest run tests/integration.test.ts
